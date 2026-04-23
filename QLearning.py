@@ -1,63 +1,110 @@
+import numpy as np 
 import matplotlib.pyplot as plt
-import numpy as np
-from keras.datasets import mnist
-from keras.models import Sequential
-from keras.layers import Dense, Flatten
-from keras.utils import to_categorical
+import random
 
-# Redes Q Profundas técnica de aprendizaje por refuerzo
+def crear_laberinto(tamanio, porcentaje_paredes=20, inicio=(0,0), meta=None):
+    laberinto = np.zeros((tamanio, tamanio))
+    numero_paredes = int((tamanio * tamanio) * porcentaje_paredes / 100)
 
-(imagenes_entrenamiento, etiquetas_entrenamiento), (imagenes_prueba, etiquetas_prueba) = mnist.load_data()
+    for pared in range(numero_paredes):
+        x, y = random.randint(0, tamanio-1), random.randint(0, tamanio-1)
 
-imagenes_entrenamiento = imagenes_entrenamiento / 255.0
-imagenes_prueba = imagenes_prueba / 255.0
+        if (x, y) != inicio and (meta is None or (x, y) != meta):
+            laberinto[x, y] = 1
 
-etiquetas_entrenamiento[0]
+    if meta:
+        laberinto[meta] = 9
+    else:
+        while True:
+            x, y = random.randint(0, tamanio-1), random.randint(0, tamanio-1)
+            if laberinto[x, y] == 0 and (x, y) != inicio:
+                laberinto[x, y] = 9
+                break
+    return laberinto
 
-etiquetas_entrenamiento = to_categorical(etiquetas_entrenamiento)
-etiquetas_prueba = to_categorical(etiquetas_prueba)
+def ver_laberinto(laberinto):
+    plt.figure(figsize=(5, 5))
+    plt.imshow(laberinto, cmap='hot', interpolation='nearest')
+    plt.colorbar();
 
-etiquetas_entrenamiento[0]
+laberinto = crear_laberinto(10, 20, inicio=(0, 0), meta=(9, 9))
+ver_laberinto(laberinto)
 
-modelo = Sequential([
-    Flatten(input_shape=(28, 28)), 
-    Dense(128, activation='relu'), 
-    Dense(10, activation='softmax')
-])         # Pila de Capas
+alpha = 0.1
+gamma = 0.9
+epsilon = 0.1
+num_episodios = 500
 
-modelo.compile(optimizer='adam',
-                loss='categorical_crossentropy', 
-                metrics=['accuracy'])
 
-modelo.fit(imagenes_entrenamiento,
-            etiquetas_entrenamiento, 
-            epochs=5,
-            validation_data=(imagenes_prueba, etiquetas_prueba))
-
-predicciones = modelo.predict(imagenes_prueba)
-
-def ver_imagen(array_predicciones, etiqueta_real, img):
-    etiqueta_real, img = etiqueta_real.argmax(), img.squeeze()
-    plt.grid(False)
-    plt.xticks([])
-    plt.yticks([])
-
-    plt.imshow(img, cmap=plt.cm.binary)
-    
-    etiqueta_predicha = np.argmax(array_predicciones)
-    if etiqueta_predicha == etiqueta_real:
-        color = 'blue'
+def epsilon_codicioso(Q, estado, tamanio_estado):
+    if random.uniform(0, 1) < epsilon:
+        return random.randint(0, 3)
     else: 
-        color = 'red'
-    plt.xlabel(f'Pred: {etiqueta_predicha} Real: {etiqueta_real}', color=color)
+        return np.argmax(Q[estado])
+    
+def ejecutar_accion(estado, accion, laberinto, tamanio):
+    fila, columna = divmod(estado, tamanio)
+    if accion == 0 and fila > 0:
+        fila -= 1
+    elif accion == 1 and fila < tamanio - 1:
+        fila += 1
+    elif accion == 2 and columna > 0:
+        columna -= 1
+    elif accion == 3 and columna < tamanio - 1:
+        columna += 1
 
-filas = 5
-columnas = 3 
-numero_imagenes = filas * columnas
-plt.figure(figsize=(2 * 2 * columnas, 2 * filas))
+    siguiente_estado = fila * tamanio + columna 
+    if laberinto[fila, columna] == 1:
+        recompensa = -100
+        siguiente_estado = estado
+        terminado = False
+    elif laberinto [fila, columna] == 9:
+        recompensa = 100 
+        terminado = True
+    else:
+        recompensa = -1 
+        terminado = False
+    return siguiente_estado, recompensa, terminado
 
-for i in range(numero_imagenes):
-    plt.subplot(filas, 2 * columnas, 2 * i + 1)
-    ver_imagen(predicciones[i], etiquetas_prueba[i], imagenes_prueba[i])
+def q_learning(laberinto, tamanio , inicio, meta):
+    Q = np.zeros((tamanio * tamanio, 4))
+    for episodio in range(num_episodios):
+        estado = inicio
+        terminado = False
+        while not terminado:
+            accion = epsilon_codicioso(Q, estado, tamanio)
+            siguiente_estado, recompensa, terminado = ejecutar_accion(estado, accion, laberinto, tamanio)
+            Q[estado, accion] += alpha * (recompensa + gamma * max(Q[siguiente_estado]) - Q[estado, accion])
+            estado = siguiente_estado
+    return Q
 
+def index_posicion(posicion, tamanio):
+    return posicion[0] * tamanio + posicion[1]
+
+tamanio = 10
+posicion_inicio = (0, 0)
+posicion_meta = (9, 9)
+laberinto = crear_laberinto(tamanio, 20, inicio=posicion_inicio, meta=posicion_meta)
+inicio = index_posicion(posicion_inicio, tamanio)
+meta = index_posicion(posicion_meta, tamanio)
+valores_Q = q_learning(laberinto, tamanio, inicio, meta)
+
+def mostar_ruta_aprendida(laberinto, Q, inicio, meta, tamanio):
+    fila, columna = divmod(inicio, tamanio)
+    ruta = [(fila, columna)]
+    estado = inicio
+    while estado != meta:
+        accion = np.argmax(Q[estado])
+        estado, _, _ = ejecutar_accion(estado, accion , laberinto, tamanio)
+        fila, columna = divmod(estado, tamanio)
+        ruta.append((fila, columna))
+    return ruta
+
+ruta = mostar_ruta_aprendida(laberinto, valores_Q, inicio, meta, tamanio)
+
+plt.figure(figsize=(5, 5))
+plt.imshow(laberinto, cmap='hot', interpolation='nearest')
+filas, columnas = zip(*ruta)
+plt.plot(columnas, filas, marker='o', color='c')
+plt.colorbar();
 plt.show()
