@@ -1,73 +1,63 @@
-# Q(s,a) = Q(s, a) + + — Q(8, a))
-
-import numpy as np
-import random
 import matplotlib.pyplot as plt
+import numpy as np
+from keras.datasets import mnist
+from keras.models import Sequential
+from keras.layers import Dense, Flatten
+from keras.utils import to_categorical
 
-dimensiones = (4, 4)
-estado_inicial = (0, 0)
-estado_objetivo = (3, 3)
-acciones = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-acciones_simbolos = ['↑', '↓', '←', '→']
-num_estados = dimensiones[0] * dimensiones[1]
-print(num_estados)  
+# Redes Q Profundas técnica de aprendizaje por refuerzo
 
-num_acciones = len(acciones)
-print(num_acciones)
+(imagenes_entrenamiento, etiquetas_entrenamiento), (imagenes_prueba, etiquetas_prueba) = mnist.load_data()
 
-Q = np.zeros((num_estados, num_acciones))
-print(Q)
+imagenes_entrenamiento = imagenes_entrenamiento / 255.0
+imagenes_prueba = imagenes_prueba / 255.0
 
-alpha = 0.1
-gamma = 0.99
-epsilon = 0.2
-episodios = 1000
+etiquetas_entrenamiento[0]
 
-# Parámetros Sarsa
+etiquetas_entrenamiento = to_categorical(etiquetas_entrenamiento)
+etiquetas_prueba = to_categorical(etiquetas_prueba)
 
-def estado_indice(estado):
-    return estado[0] * dimensiones[1] + estado[1]
+etiquetas_entrenamiento[0]
 
-print(estado_indice((3, 0)))
+modelo = Sequential([
+    Flatten(input_shape=(28, 28)), 
+    Dense(128, activation='relu'), 
+    Dense(10, activation='softmax')
+])         # Pila de Capas
 
-def elegir_accion(estado):
-    if random.uniform(0, 1) < epsilon:
-        return random.randint(0, num_acciones - 1)
-    else: 
-        return np.argmax(Q[estado_indice(estado)])
+modelo.compile(optimizer='adam',
+                loss='categorical_crossentropy', 
+                metrics=['accuracy'])
 
-def aplicar_accion(estado, accion_idx):
-    accion = acciones[accion_idx]
-    nuevo_estado = tuple(np.add(estado, accion) % np.array(dimensiones))
+modelo.fit(imagenes_entrenamiento,
+            etiquetas_entrenamiento, 
+            epochs=5,
+            validation_data=(imagenes_prueba, etiquetas_prueba))
 
-    if nuevo_estado == estado_objetivo:
-        recompensa = 1 
-    else: 
-        recompensa = -1
+predicciones = modelo.predict(imagenes_prueba)
+
+def ver_imagen(array_predicciones, etiqueta_real, img):
+    etiqueta_real, img = etiqueta_real.argmax(), img.squeeze()
+    plt.grid(False)
+    plt.xticks([])
+    plt.yticks([])
+
+    plt.imshow(img, cmap=plt.cm.binary)
     
-    return nuevo_estado, recompensa, nuevo_estado == estado_objetivo
+    etiqueta_predicha = np.argmax(array_predicciones)
+    if etiqueta_predicha == etiqueta_real:
+        color = 'blue'
+    else: 
+        color = 'red'
+    plt.xlabel(f'Pred: {etiqueta_predicha} Real: {etiqueta_real}', color=color)
 
-for epsilon in range(episodios):
-    estado = estado_inicial
-    accion_idx = elegir_accion(estado)
-    terminado = False
+filas = 5
+columnas = 3 
+numero_imagenes = filas * columnas
+plt.figure(figsize=(2 * 2 * columnas, 2 * filas))
 
-    while not terminado:
-        nuevo_estado , recompensa , terminado = aplicar_accion(estado, accion_idx)
-        nueva_accion_idx = elegir_accion(nuevo_estado)
+for i in range(numero_imagenes):
+    plt.subplot(filas, 2 * columnas, 2 * i + 1)
+    ver_imagen(predicciones[i], etiquetas_prueba[i], imagenes_prueba[i])
 
-        indice = estado_indice(estado)
-        Q[indice, accion_idx] += alpha * (recompensa + gamma * Q[estado_indice(nuevo_estado), nueva_accion_idx] - Q[indice, accion_idx])
-        # Lógica del algoritmo
-        estado, accion_idx = nuevo_estado, nueva_accion_idx
-
-politica_simbolos = np.empty(dimensiones, dtype='<U2')
-for i in range(dimensiones[0]):
-    for j in range(dimensiones[1]):
-        estado = (i, j)
-        mejor_accion = np.argmax(Q[estado_indice(estado)])
-        politica_simbolos[i, j] = acciones_simbolos[mejor_accion]
-        
-print(politica_simbolos)
-
-
+plt.show()
