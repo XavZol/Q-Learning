@@ -1,48 +1,26 @@
 import pandas as pd
-import uuid
-import hashlib
+from sklearn.model_selection import train_test_split
+from sklearn.utils import resample
 
 data = pd.DataFrame({
-    'nombre': ['Ana', 'Juan', 'Luis'],
-    'email': ['ana@ana.com', 'juan@juan.com', 'luis@luis.com'],
-    'ubicacion': ['Ciudad A', 'Ciudad B', 'Ciudad C']
+    'edad': ['22', '45', '36', '29', '55'],
+    'género': ['F', 'M', 'M', 'F', 'M'],
+    'contratado': [1, 0, 1, 0, 1]
 })
 
-id_pseudo = []
+agrupado = data.groupby('género')
 
-for n in range(len(data)):
-    id_pseudo.append(str(uuid.uuid4()))
+for nombre, grupo in agrupado:
+    print(nombre, grupo)
 
-print(id_pseudo)
+data_balanceado = pd.DataFrame()
 
-data['id_pseudo'] = id_pseudo
-data.drop('nombre', axis=1, inplace=True)
-print(data)
+for nombre, grupo in agrupado:
+    grupo_balanceado = resample(grupo, 
+                                replace=True,
+                                n_samples=10,
+                                random_state=123)
+    data_balanceado = pd.concat([data_balanceado, grupo_balanceado])
 
-def hash_data(data):
-    return hashlib.sha256(data.encode()).hexdigest()
+print(data_balanceado)
 
-hash_emails = []
-
-for email in data['email']:
-    h_email = hash_data(email)
-    hash_emails.append(h_email)
-data['email'] = hash_emails
-
-print(data)
-
-mis_tokens = {}
-
-def tokenizar(dato):
-    token = str(uuid.uuid4())
-    mis_tokens[token] = dato
-    return token
-
-def recuperar_dato(token):
-    return mis_tokens.get(token, "Token no válido")
-
-dato_original = "123-456-789"
-token = tokenizar(dato_original)
-
-print(f'Token generado: {token}')
-print(f'Dato recuperado: {recuperar_dato(token)}')
